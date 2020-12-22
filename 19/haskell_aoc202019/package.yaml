@@ -1,0 +1,61 @@
+# This YAML file describes your package. Stack will automatically generate a
+# Cabal file when you run `stack build`. See the hpack website for help with
+# this file: <https://github.com/sol/hpack>.
+name: aoc202019
+version: '0.0.1'
+license: MIT
+author: "Steve King"
+maintainer: "Steve King"
+# synopsis: A new Haskeleton package.
+# description: haskell_aoc202019 is a new Haskeleton package.
+# category: Other
+
+extra-source-files:
+- LICENSE.md
+- package.yaml
+- README.md
+- stack.yaml
+
+ghc-options: -Wall
+
+executables:
+  solution:
+    main: Main.hs
+    source-dirs: src
+    dependencies:
+    - aoc202019
+    - base
+    - containers
+
+library:
+  dependencies:
+  - base
+  - containers
+  source-dirs: lib
+
+benchmarks:
+  aoc202019-benchmarks:
+    source-dirs: benchmark
+    main: Main.hs
+    dependencies:
+    - base
+    - aoc202019
+    - criterion
+    ghc-options:
+    - -rtsopts
+    - -threaded
+    - -with-rtsopts=-N
+
+tests:
+  aoc202019-test-suite:
+    source-dirs: test-suite
+    main: Main.hs
+    dependencies:
+    - base
+    - aoc202019
+    - tasty
+    - tasty-hspec
+    ghc-options:
+    - -rtsopts
+    - -threaded
+    - -with-rtsopts=-N

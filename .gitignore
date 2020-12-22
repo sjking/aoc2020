@@ -1,3 +1,6 @@
 .DS_Store
 venv
 .idea
+*.cabal
+stack.yaml.lock
+.stack*
