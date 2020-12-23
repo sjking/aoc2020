@@ -4,3 +4,5 @@ venv
 *.cabal
 stack.yaml.lock
 .stack*
+__pycache__
+__init__
