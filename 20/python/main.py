@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from collections import defaultdict
+import time
 from typing import List
 from math import sqrt
 import os
@@ -14,14 +15,33 @@ class Tile:
     w: List[str] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(order=True)
 class TileInfo:
     tile: Tile
     rotation: int = 0
+    flipped: bool = False
 
 
 def rev(ls):
     return list(reversed(ls))
+
+
+def flipped_v(tile_info):
+    tile = tile_info.tile
+    new_tile = Tile(num=tile.num, n=tile.s, e=rev(tile.e), s=tile.n, w=rev(tile.w))
+    new_tile_info = TileInfo(tile=new_tile,
+                             rotation=tile_info.rotation,
+                             flipped=True)
+    return new_tile_info
+
+
+def flipped_h(tile_info):
+    tile = tile_info.tile
+    new_tile = Tile(num=tile.num, n=rev(tile.n), e=tile.w, s=rev(tile.s), w=tile.e)
+    new_tile_info = TileInfo(tile=new_tile,
+                             rotation=tile_info.rotation,
+                             flipped=True)
+    return new_tile_info
 
 
 def parse_line(line, tile_infos, curr_tiles):
@@ -57,6 +77,8 @@ def parse_line(line, tile_infos, curr_tiles):
             elif r == 3:
                 t.n, t.e, t.s, t.w = e, rev(s), w, rev(n)
             tile_infos.append(tile_info)
+            tile_infos.append(flipped_v(tile_info))
+            tile_infos.append(flipped_h(tile_info))
     return 0
 
 
@@ -64,15 +86,20 @@ def make_key(ls):
     return "".join(ls)
 
 
+def make_key_2(xs, ys):
+    return "".join(xs), "".join(ys)
+
+
 def build_table(tile_infos):
     table = {"n": defaultdict(list),
              "e": defaultdict(list),
              "s": defaultdict(list),
-             "w": defaultdict(list)}
+             "w": defaultdict(list),
+             "nw": defaultdict(list)}
     for tile_info in tile_infos:
         t = tile_info.tile
-        n, e, s, w = make_key(t.n), make_key(t.e), make_key(t.s), make_key(t.w)
-        ns, es, ss, ws = table["n"][n], table["e"][e], table["s"][s], table["w"][w]
+        n, e, s, w, nw = make_key(t.n), make_key(t.e), make_key(t.s), make_key(t.w), make_key_2(t.n, t.w)
+        ns, es, ss, ws, nws = table["n"][n], table["e"][e], table["s"][s], table["w"][w], table["nw"][nw]
         if tile_info not in ns:
             ns.append(tile_info)
         if tile_info not in es:
@@ -81,6 +108,17 @@ def build_table(tile_infos):
             ss.append(tile_info)
         if tile_info not in ws:
             ws.append(tile_info)
+        if tile_info not in nw:
+            nws.append(tile_info)
+    total_values, total_keys = 0, 0
+    for k, vs in table["n"].items():
+        total_keys += 1
+        total_values += len(vs)
+    for k, vs in table["w"].items():
+        total_keys += 1
+        total_values += len(vs)
+    print(total_values / total_keys)
+    # about 3 values per key on average
     return table
 
 
@@ -95,12 +133,15 @@ def print_solution(grid, sz):
 def build_grid(table, grid, sz, tile_infos):
     used = set()
     solution = [None]
+    counter = [0]
 
     def search(pos):
-        print(pos)
         if pos == sz * sz:
             solution[0] = grid.copy()
             return
+        counter[0] += 1
+        if counter[0] % 10_000_000 == 0:
+            print("Iteration: ", counter[0])
         row, col = pos // sz, pos % sz
         left_tile = None if col == 0 else grid[row][col - 1]
         above_tile = None if row == 0 else grid[row - 1][col]
@@ -125,16 +166,15 @@ def build_grid(table, grid, sz, tile_infos):
                     grid[row][col] = None
                     used.remove(t.tile.num)
         else:
-            for t in table["w"][make_key(left_tile.tile.e)]:
-                for u in table["n"][make_key(above_tile.tile.s)]:
-                    if t == u and u.tile.num not in used:
-                        used.add(t.tile.num)
-                        grid[row][col] = t
-                        search(pos + 1)
-                        if solution[0]:
-                            return
-                        grid[row][col] = None
-                        used.remove(t.tile.num)
+            for t in table["nw"][make_key_2(above_tile.tile.s, left_tile.tile.e)]:
+                if t.tile.num not in used:
+                    used.add(t.tile.num)
+                    grid[row][col] = t
+                    search(pos + 1)
+                    if solution[0]:
+                        return
+                    grid[row][col] = None
+                    used.remove(t.tile.num)
 
     for tile_info in tile_infos:
         tile = tile_info.tile
@@ -159,10 +199,13 @@ def main(input_file):
     table = build_table(tile_infos)
     sz = round(sqrt(num_tiles))
     grid = [[None for _ in range(sz)] for _ in range(sz)]
+    start = time.monotonic()
     build_grid(table, grid, sz, tile_infos)
+    end = time.monotonic()
+    print(f"Total Time: {end - start} seconds")
 
 
 if __name__ == '__main__':
-    infile = "test_input"
+    infile = "input"
     path = os.path.dirname(os.path.realpath(__file__))
     main(f"{path}/resources/{infile}")
