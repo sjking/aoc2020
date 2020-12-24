@@ -2,7 +2,6 @@ import sys
 import os
 import time
 from dataclasses import dataclass
-from collections import defaultdict
 
 sys.setrecursionlimit(1000)
 IN_FIlE = "input"
@@ -120,8 +119,81 @@ def solution_1(tiles):
     return num_black
 
 
-def solution_2():
-    pass
+def go(positions):
+
+    def is_black(p, ps):
+        return p in ps and not ps[p]
+
+    def neighbours(pos_prime):
+        a, b, c, d, e, f = pos_prime
+        ns = []
+        ps = [Position(a + 1, b, c, d, e, f),
+              Position(a, b + 1, c, d, e, f),
+              Position(a, b, c + 1, d, e, f),
+              Position(a, b, c, d + 1, e, f),
+              Position(a, b, c, d, e + 1, f),
+              Position(a, b, c, d, e, f + 1)]
+        for p in ps:
+            simplify(p)
+            ns.append(p.key())
+        return ns
+
+    curr_positions = positions
+
+    for rnd in range(101):
+        new_positions = curr_positions.copy()
+        num_black = len(list(filter(lambda color: not color, curr_positions.values())))
+        print(f"Round {rnd}: {num_black}")
+        visited = set()
+        for pos in curr_positions.keys():
+            if is_black(pos, curr_positions) and pos not in visited:
+                s = [pos]
+                while len(s) > 0:
+                    p = s.pop()
+                    if p not in visited:
+                        visited.add(p)
+                        black_neighbours = 0
+                        adjs = neighbours(p)
+                        for adj in adjs:
+                            if is_black(adj, curr_positions):
+                                black_neighbours += 1
+                            if adj not in visited and is_black(p, curr_positions):
+                                s.append(adj)
+                        if is_black(p, curr_positions):
+                            if black_neighbours == 0 or black_neighbours > 2:
+                                new_positions[p] = True
+                        else:
+                            if black_neighbours == 2:
+                                new_positions[p] = False
+        curr_positions = new_positions
+
+    num_black = len(list(filter(lambda color: not color, curr_positions.values())))
+    return num_black
+
+
+def solution_2(tiles):
+    positions = dict()
+    for tile in tiles:
+        i = 0
+        n = len(tile)
+        curr_position = Position()
+        while i < n - 1:
+            if tile[i:i+2] in directions:
+                direction = tile[i:i+2]
+                i += 2
+            else:
+                direction = tile[i]
+                i += 1
+            update_position(curr_position, direction)
+        if i == len(tile) - 1:
+            update_position(curr_position, tile[i])
+        simplify(curr_position)
+        key = curr_position.key()
+        if key in positions:
+            positions[key] = not positions[key]
+        else:
+            positions[key] = False
+    return go(positions)
 
 
 def parse_line(line, tiles):
@@ -139,7 +211,7 @@ def main(infile=IN_FIlE, path=PATH):
             parse_line(line, tiles)
     start = time.monotonic()
     result_1 = solution_1(tiles)
-    result_2 = solution_2()
+    result_2 = solution_2(tiles)
     end = time.monotonic()
     print(f"Elapsed time: {end - start} seconds")
     print(f"Part 1: {result_1}")
