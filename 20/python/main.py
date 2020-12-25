@@ -1,9 +1,15 @@
 from dataclasses import dataclass, field
 from collections import defaultdict
+from enum import Enum
 import time
 from typing import List
 from math import sqrt
 import os
+
+
+MONSTER = ["                  # ",
+           "#    ##    ##    ###",
+           " #  #  #  #  #  #   "]
 
 
 @dataclass
@@ -15,11 +21,17 @@ class Tile:
     w: List[str] = field(default_factory=list)
 
 
+class Flip(Enum):
+    none = "none"
+    horizontal = "horizontal"
+    vertical = "vertical"
+
+
 @dataclass(order=True)
 class TileInfo:
     tile: Tile
     rotation: int = 0
-    flipped: bool = False
+    flipped: Flip = Flip.none
 
 
 def rev(ls):
@@ -31,7 +43,7 @@ def flipped_v(tile_info):
     new_tile = Tile(num=tile.num, n=tile.s, e=rev(tile.e), s=tile.n, w=rev(tile.w))
     new_tile_info = TileInfo(tile=new_tile,
                              rotation=tile_info.rotation,
-                             flipped=True)
+                             flipped=Flip.vertical)
     return new_tile_info
 
 
@@ -40,15 +52,16 @@ def flipped_h(tile_info):
     new_tile = Tile(num=tile.num, n=rev(tile.n), e=tile.w, s=rev(tile.s), w=tile.e)
     new_tile_info = TileInfo(tile=new_tile,
                              rotation=tile_info.rotation,
-                             flipped=True)
+                             flipped=Flip.horizontal)
     return new_tile_info
 
 
-def parse_line(line, tile_infos, curr_tiles):
+def parse_line(line, tile_infos, curr_tiles, raw_tiles, curr_lines):
     if not line:
         return 0
     if "Tile" in line:
         curr_tiles.clear()
+        curr_lines.clear()
         toks = line.split()
         tile_id = int(toks[1][:-1])
         for r in range(4):
@@ -60,9 +73,11 @@ def parse_line(line, tile_infos, curr_tiles):
     if not tile.n:
         tile.n = list(line)
     n = len(tile.n)
+    curr_lines.append(line)
     tile.w.append(line[0])
     tile.e.append(line[-1])
     if len(tile.e) == n:
+        raw_tiles[tile.num] = list(map(list, curr_lines))
         tile.s = list(line)
         n, s, e, w = tile.n, tile.s, tile.e, tile.w
         for tile_info in curr_tiles:
@@ -189,10 +204,7 @@ def build_grid(table, grid, sz, tile_infos, counts):
                     grid[row][col] = None
                     used.remove(t.tile.num)
 
-    n = 0
     for tile_info in tile_infos:
-        n += 1
-        print(f"Trying starting from tile {n}")
         tile = tile_info.tile
         if counts[make_key(tile.n)] > 8 and counts[make_key(tile.w)] > 8:
             continue
@@ -205,23 +217,151 @@ def build_grid(table, grid, sz, tile_infos, counts):
         grid[0][0] = None
 
 
+def rotate_image(image, r):
+    n = len(image)
+    m = image
+
+    def rot(l, r, t, b):
+        if l < r and t < b:
+            j = 0
+            for i in range(l, r):
+                tmp = m[t][i]
+                m[t][i] = m[b - j][l]
+                m[b - j][l] = m[b][r - j]
+                m[b][r - j] = m[t + j][r]
+                m[t + j][r] = tmp
+                j += 1
+            rot(l + 1, r - 1, t + 1, b - 1)
+
+    for _ in range(r):
+        rot(0, n - 1, 0, n - 1)
+
+
+def flip_tile(raw_tile, flipped):
+    if flipped is Flip.none:
+        return
+    if flipped is Flip.vertical:
+        lo, hi = 0, len(raw_tile) - 1
+        while lo < hi:
+            tmp = raw_tile[lo]
+            raw_tile[lo] = raw_tile[hi]
+            raw_tile[hi] = tmp
+            lo, hi = lo+1, hi-1
+        return
+    if flipped is Flip.horizontal:
+        for row in raw_tile:
+            row.reverse()
+        return
+
+
+def place_tile(tile_info, image, raw_tile, row, col, sz):
+    raw_tile = raw_tile.copy()
+    rotate_image(raw_tile, tile_info.rotation)
+    flip_tile(raw_tile, tile_info.flipped)
+    for i in range(1, len(raw_tile) - 1):
+        for j in range(1, len(raw_tile) - 1):
+            ix, jx = (row * sz) + (i - 1), (col * sz) + (j - 1)
+            image[ix][jx] = raw_tile[i][j]
+
+
+def search_monster(image, monster, monster_h, monster_w):
+    n = len(image)
+    monster_mash = False
+    for row in range(n - monster_h):
+        for col in range(n - monster_w):
+            found = True
+            for i, r in enumerate(monster):
+                if not found:
+                    break
+                for j in r:
+                    if image[row + i][col + j] != "#":
+                        found = False
+                        break
+            if found:
+                monster_mash = True
+                for i, r in enumerate(monster):
+                    for j in r:
+                        image[row + i][col + j] = "O"
+    return monster_mash
+
+
+def count_rough_waters(image):
+    num = 0
+    for row in image:
+        for c in row:
+            if c == "#":
+                num += 1
+    return num
+
+
+def copy_image(image):
+    new_image = []
+    for row in image:
+        new_row = row.copy()
+        new_image.append(new_row)
+    return new_image
+
+
+def find_sea_monsters(grid, raw_tiles, sz, monster):
+    n = len(grid[0][0].tile.n) - 2
+    m = n * sz
+    image = [['.' for _ in range(m)] for _ in range(m)]
+    for i, row in enumerate(grid):
+        for j, tile_info in enumerate(row):
+            place_tile(tile_info, image, raw_tiles[tile_info.tile.num], i, j, n)
+    images = []
+    for r in range(4):
+        img = copy_image(image)
+        rotate_image(img, r)
+        images.append(img)
+    flips = []
+    for img in images:
+        ic = copy_image(img)
+        flip_tile(ic, Flip.horizontal)
+        flips.append(ic)
+        ic = copy_image(img)
+        flip_tile(ic, Flip.vertical)
+        flips.append(ic)
+    images.extend(flips)
+    for image in images:
+        if search_monster(image, monster, len(MONSTER), len(MONSTER[0])):
+            return count_rough_waters(image)
+    raise Exception
+
+
+def build_sea_monster(monster):
+    m = []
+    for line in monster:
+        l = []
+        for i, c in enumerate(line):
+            if c == "#":
+                l.append(i)
+        m.append(l)
+    return m
+
+
 def main(input_file):
     curr_tiles = []
     tile_infos = []
+    raw_tiles = dict()
+    curr_lines = []
     num_tiles = 0
     with open(input_file, 'r') as f:
         for line in f:
             line = line.strip()
-            num_tiles += parse_line(line, tile_infos, curr_tiles)
+            num_tiles += parse_line(line, tile_infos, curr_tiles, raw_tiles, curr_lines)
     table, counts = build_table(tile_infos)
     sz = round(sqrt(num_tiles))
     grid = [[None for _ in range(sz)] for _ in range(sz)]
     start = time.monotonic()
     build_grid(table, grid, sz, tile_infos, counts)
     answer_part_1 = calculate_answer_1(grid, sz)
+    sea_monster = build_sea_monster(MONSTER)
+    answer_part_2 = find_sea_monsters(grid, raw_tiles, sz, sea_monster)
     end = time.monotonic()
     print(f"Total Time: {end - start} seconds")
     print(f"Part 1: {answer_part_1}")
+    print(f"Part 2: {answer_part_2}")
 
 
 if __name__ == '__main__':
