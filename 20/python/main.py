@@ -96,6 +96,7 @@ def build_table(tile_infos):
              "s": defaultdict(list),
              "w": defaultdict(list),
              "nw": defaultdict(list)}
+    counts = defaultdict(int)
     for tile_info in tile_infos:
         t = tile_info.tile
         n, e, s, w, nw = make_key(t.n), make_key(t.e), make_key(t.s), make_key(t.w), make_key_2(t.n, t.w)
@@ -110,6 +111,8 @@ def build_table(tile_infos):
             ws.append(tile_info)
         if tile_info not in nw:
             nws.append(tile_info)
+        for k in [n, e, s, w]:
+            counts[k] += 1
     total_values, total_keys = 0, 0
     for k, vs in table["n"].items():
         total_keys += 1
@@ -119,18 +122,18 @@ def build_table(tile_infos):
         total_values += len(vs)
     print(total_values / total_keys)
     # about 3 values per key on average
-    return table
+    return table, counts
 
 
-def print_solution(grid, sz):
+def calculate_answer_1(grid, sz):
     t1, t2, t3, t4 = grid[0][0], grid[0][sz - 1], grid[sz - 1][0], grid[sz - 1][sz - 1]
     p = 1
     for t in [t1, t2, t3, t4]:
         p *= t.tile.num
-    print(p)
+    return p
 
 
-def build_grid(table, grid, sz, tile_infos):
+def build_grid(table, grid, sz, tile_infos, counts):
     used = set()
     solution = [None]
     counter = [0]
@@ -147,6 +150,10 @@ def build_grid(table, grid, sz, tile_infos):
         above_tile = None if row == 0 else grid[row - 1][col]
         if not above_tile:
             for t in table["w"][make_key(left_tile.tile.e)]:
+                if counts[make_key(t.tile.n)] > 8 and counts[make_key(t.tile.w)] > 8:
+                    continue
+                if col == sz - 1 and counts[make_key(t.tile.e)] > 8:
+                    continue
                 if t.tile.num not in used:
                     used.add(t.tile.num)
                     grid[row][col] = t
@@ -157,6 +164,8 @@ def build_grid(table, grid, sz, tile_infos):
                     used.remove(t.tile.num)
         elif not left_tile:
             for t in table["n"][make_key(above_tile.tile.s)]:
+                if counts[make_key(t.tile.w)] > 8:
+                    continue
                 if t.tile.num not in used:
                     used.add(t.tile.num)
                     grid[row][col] = t
@@ -167,6 +176,10 @@ def build_grid(table, grid, sz, tile_infos):
                     used.remove(t.tile.num)
         else:
             for t in table["nw"][make_key_2(above_tile.tile.s, left_tile.tile.e)]:
+                if row == sz - 1 and counts[make_key(t.tile.s)] > 8:
+                    continue
+                if col == sz - 1 and counts[make_key(t.tile.e)] > 8:
+                    continue
                 if t.tile.num not in used:
                     used.add(t.tile.num)
                     grid[row][col] = t
@@ -176,13 +189,17 @@ def build_grid(table, grid, sz, tile_infos):
                     grid[row][col] = None
                     used.remove(t.tile.num)
 
+    n = 0
     for tile_info in tile_infos:
+        n += 1
+        print(f"Trying starting from tile {n}")
         tile = tile_info.tile
+        if counts[make_key(tile.n)] > 8 and counts[make_key(tile.w)] > 8:
+            continue
         grid[0][0] = tile_info
         used.add(tile.num)
         search(1)
         if solution[0]:
-            print_solution(grid, sz)
             return
         used.remove(tile.num)
         grid[0][0] = None
@@ -196,13 +213,15 @@ def main(input_file):
         for line in f:
             line = line.strip()
             num_tiles += parse_line(line, tile_infos, curr_tiles)
-    table = build_table(tile_infos)
+    table, counts = build_table(tile_infos)
     sz = round(sqrt(num_tiles))
     grid = [[None for _ in range(sz)] for _ in range(sz)]
     start = time.monotonic()
-    build_grid(table, grid, sz, tile_infos)
+    build_grid(table, grid, sz, tile_infos, counts)
+    answer_part_1 = calculate_answer_1(grid, sz)
     end = time.monotonic()
     print(f"Total Time: {end - start} seconds")
+    print(f"Part 1: {answer_part_1}")
 
 
 if __name__ == '__main__':
